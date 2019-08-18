@@ -3,15 +3,17 @@
 package easyvk
 
 import (
-	"net/url"
-	"net/http"
-	"io/ioutil"
-	"fmt"
 	"encoding/json"
-	"golang.org/x/net/html"
-	"net/http/cookiejar"
-	"io"
 	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+
+	"github.com/sirupsen/logrus"
+	"golang.org/x/net/html"
 )
 
 const (
@@ -39,6 +41,7 @@ type VK struct {
 	Status      Status
 	Upload      Upload
 	Wall        Wall
+	Users       Users
 }
 
 // WithToken helps to initialize your
@@ -47,14 +50,15 @@ func WithToken(token string) VK {
 	vk := VK{}
 	vk.AccessToken = token
 	vk.Version = version
-	vk.Account = Account{&vk }
-	vk.Board = Board{&vk }
-	vk.Fave = Fave{&vk }
-	vk.Likes = Likes{&vk }
-	vk.Photos = Photos{&vk }
-	vk.Status = Status{&vk }
+	vk.Account = Account{&vk}
+	vk.Board = Board{&vk}
+	vk.Fave = Fave{&vk}
+	vk.Likes = Likes{&vk}
+	vk.Photos = Photos{&vk}
+	vk.Status = Status{&vk}
 	vk.Upload = Upload{}
-	vk.Wall = Wall{&vk }
+	vk.Wall = Wall{&vk}
+	vk.Users = Users{&vk}
 	return vk
 }
 
@@ -101,8 +105,11 @@ func WithAuth(login, password, clientID, scope string) (VK, error) {
 	if err != nil {
 		return VK{}, err
 	}
-
-	return WithToken(urlArgs["access_token"][0]), nil
+	at, ok := urlArgs["access_token"]
+	if !ok {
+		return VK{}, fmt.Errorf("invalid access token")
+	}
+	return WithToken(at[0]), nil
 }
 
 func parseForm(body io.ReadCloser) (url.Values, string) {
@@ -157,7 +164,7 @@ func parseForm(body io.ReadCloser) (url.Values, string) {
 }
 
 // Request provides access to VK API methods.
-func (vk *VK) Request(method string, params map[string]string) ([]byte, error) {
+func (vk VK) Request(method string, params map[string]string) ([]byte, error) {
 	u, err := url.Parse(apiURL + method)
 	if err != nil {
 		return nil, err
@@ -167,6 +174,7 @@ func (vk *VK) Request(method string, params map[string]string) ([]byte, error) {
 	for k, v := range params {
 		query.Set(k, v)
 	}
+	logrus.Debugln("Access token: ", vk.AccessToken)
 	query.Set("access_token", vk.AccessToken)
 	query.Set("v", vk.Version)
 	u.RawQuery = query.Encode()
